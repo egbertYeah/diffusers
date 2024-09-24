@@ -187,6 +187,3 @@ experiments/
 vqvae/data/
 
 *.zip
-
-*.png 
-*.jpg
