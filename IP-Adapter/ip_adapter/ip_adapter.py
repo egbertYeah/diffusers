@@ -7,7 +7,7 @@ from diffusers.pipelines.controlnet import MultiControlNetModel
 from PIL import Image
 from safetensors import safe_open
 from transformers import CLIPImageProcessor, CLIPVisionModelWithProjection
-
+import pdb
 from .utils import is_torch2_available, get_generator
 
 if is_torch2_available():
@@ -122,6 +122,7 @@ class IPAdapter:
                 self.pipe.controlnet.set_attn_processor(CNAttnProcessor(num_tokens=self.num_tokens))
 
     def load_ip_adapter(self):
+        pdb.set_trace()
         if os.path.splitext(self.ip_ckpt)[-1] == ".safetensors":
             state_dict = {"image_proj": {}, "ip_adapter": {}}
             with safe_open(self.ip_ckpt, framework="pt", device="cpu") as f:
@@ -246,7 +247,7 @@ class IPAdapterXL(IPAdapter):
         if not isinstance(negative_prompt, List):
             negative_prompt = [negative_prompt] * num_prompts
 
-        image_prompt_embeds, uncond_image_prompt_embeds = self.get_image_embeds(pil_image)
+        image_prompt_embeds, uncond_image_prompt_embeds = self.get_image_embeds(pil_image)      # 获取image proj embedding 
         bs_embed, seq_len, _ = image_prompt_embeds.shape
         image_prompt_embeds = image_prompt_embeds.repeat(1, num_samples, 1)
         image_prompt_embeds = image_prompt_embeds.view(bs_embed * num_samples, seq_len, -1)

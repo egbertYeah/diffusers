@@ -772,7 +772,8 @@ class UNet2DConditionLoadersMixin:
 
             if cross_attention_dim is None or "motion_modules" in name:
                 attn_processor_class = self.attn_processors[name].__class__
-                attn_procs[name] = attn_processor_class()
+                # attn_procs[name] = attn_processor_class()
+                attn_procs[name] = self.attn_processors[name]
 
             else:
                 attn_processor_class = (

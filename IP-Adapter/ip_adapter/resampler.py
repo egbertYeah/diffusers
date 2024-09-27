@@ -96,7 +96,7 @@ class Resampler(nn.Module):
         super().__init__()
         self.pos_emb = nn.Embedding(max_seq_len, embedding_dim) if apply_pos_emb else None
 
-        self.latents = nn.Parameter(torch.randn(1, num_queries, dim) / dim**0.5)
+        self.latents = nn.Parameter(torch.randn(1, num_queries, dim) / dim**0.5)        # learned latent queries
 
         self.proj_in = nn.Linear(embedding_dim, dim)
 

@@ -1130,8 +1130,8 @@ class BoltSDXLInpaintingDataset(Dataset):
         # 读取数据
         instance_image = Image.open(img_path)
         instance_image, instance_mask = self.crop_and_expand_with_masks(image=instance_image, boxes=bboxes, expansion_factor=3)
-        # instance_image.save(f"datasets/zaohe/tmp/images/{img_fname}.png")
-        # instance_mask.save(f"datasets/zaohe/tmp/masks/{img_fname}.png")
+        instance_image.save(f"datasets/zaohe/tmp/images/{name}-{img_fname}.png")
+        instance_mask.save(f"datasets/zaohe/tmp/masks/{name}-{img_fname}.png")
         
         example = self.perform_transform(image=instance_image, mask=instance_mask,)
 
