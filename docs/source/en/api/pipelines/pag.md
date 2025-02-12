@@ -48,13 +48,26 @@ Since RegEx is supported as a way for matching layer identifiers, it is crucial 
   - all
   - __call__
 
+## StableDiffusionPAGInpaintPipeline
+[[autodoc]] StableDiffusionPAGInpaintPipeline
+	- all
+	- __call__
+
 ## StableDiffusionPAGPipeline
 [[autodoc]] StableDiffusionPAGPipeline
 	- all
 	- __call__
 
+## StableDiffusionPAGImg2ImgPipeline
+[[autodoc]] StableDiffusionPAGImg2ImgPipeline
+	- all
+	- __call__
+
 ## StableDiffusionControlNetPAGPipeline
 [[autodoc]] StableDiffusionControlNetPAGPipeline
+
+## StableDiffusionControlNetPAGInpaintPipeline
+[[autodoc]] StableDiffusionControlNetPAGInpaintPipeline
 	- all
 	- __call__
 
@@ -78,12 +91,20 @@ Since RegEx is supported as a way for matching layer identifiers, it is crucial 
 	- all
 	- __call__
 
+## StableDiffusionXLControlNetPAGImg2ImgPipeline
+[[autodoc]] StableDiffusionXLControlNetPAGImg2ImgPipeline
+	- all
+	- __call__
 
 ## StableDiffusion3PAGPipeline
 [[autodoc]] StableDiffusion3PAGPipeline
 	- all
 	- __call__
 
+## StableDiffusion3PAGImg2ImgPipeline
+[[autodoc]] StableDiffusion3PAGImg2ImgPipeline
+	- all
+	- __call__
 
 ## PixArtSigmaPAGPipeline
 [[autodoc]] PixArtSigmaPAGPipeline

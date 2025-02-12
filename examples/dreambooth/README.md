@@ -313,7 +313,7 @@ Let's get started with a simple example. We will re-use the dog example of the [
 First, you need to set-up your dreambooth training example as is explained in the [installation section](#Installing-the-dependencies).
 Next, let's download the dog dataset. Download images from [here](https://drive.google.com/drive/folders/1BO_dyz-p65qhBRRMRA4TbZ8qW4rB99JZ) and save them in a directory. Make sure to set `INSTANCE_DIR` to the name of your directory further below. This will be our training data.
 
-Now, you can launch the training. Here we will use [Stable Diffusion 1-5](https://huggingface.co/runwayml/stable-diffusion-v1-5).
+Now, you can launch the training. Here we will use [Stable Diffusion 1-5](https://huggingface.co/stable-diffusion-v1-5/stable-diffusion-v1-5).
 
 **___Note: Change the `resolution` to 768 if you are using the [stable-diffusion-2](https://huggingface.co/stabilityai/stable-diffusion-2) 768x768 model.___**
 
@@ -321,7 +321,7 @@ Now, you can launch the training. Here we will use [Stable Diffusion 1-5](https:
 
 
 ```bash
-export MODEL_NAME="runwayml/stable-diffusion-v1-5"
+export MODEL_NAME="stable-diffusion-v1-5/stable-diffusion-v1-5"
 export INSTANCE_DIR="dog"
 export OUTPUT_DIR="path-to-save-model"
 ```
@@ -742,3 +742,29 @@ accelerate launch train_dreambooth.py \
 ## Stable Diffusion XL
 
 We support fine-tuning of the UNet shipped in [Stable Diffusion XL](https://huggingface.co/papers/2307.01952) with DreamBooth and LoRA via the `train_dreambooth_lora_sdxl.py` script. Please refer to the docs [here](./README_sdxl.md).
+
+## Dataset
+
+We support 🤗 [Datasets](https://huggingface.co/docs/datasets/index), you can find a dataset on the [Hugging Face Hub](https://huggingface.co/datasets) or use your own.
+
+The quickest way to get started with your custom dataset is 🤗 Datasets' [`ImageFolder`](https://huggingface.co/docs/datasets/image_dataset#imagefolder).
+
+We need to create a file `metadata.jsonl` in the directory with our images:
+
+```
+{"file_name": "01.jpg", "prompt": "prompt 01"}
+{"file_name": "02.jpg", "prompt": "prompt 02"}
+```
+
+If we have a directory with image-text pairs e.g. `01.jpg` and `01.txt` then `convert_to_imagefolder.py` can create `metadata.jsonl`.
+
+```sh
+python convert_to_imagefolder.py --path my_dataset/
+```
+
+We use `--dataset_name` and `--caption_column` with training scripts.
+
+```
+--dataset_name=my_dataset/
+--caption_column=prompt
+```

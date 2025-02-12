@@ -26,6 +26,7 @@ from ...models.unets.unet_motion_model import MotionAdapter
 from ...schedulers import KarrasDiffusionSchedulers
 from ...utils import (
     USE_PEFT_BACKEND,
+    is_torch_xla_available,
     logging,
     replace_example_docstring,
     scale_lora_layers,
@@ -40,7 +41,15 @@ from ..pipeline_utils import DiffusionPipeline, StableDiffusionMixin
 from .pag_utils import PAGMixin
 
 
+if is_torch_xla_available():
+    import torch_xla.core.xla_model as xm
+
+    XLA_AVAILABLE = True
+else:
+    XLA_AVAILABLE = False
+
 logger = logging.get_logger(__name__)  # pylint: disable=invalid-name
+
 
 EXAMPLE_DOC_STRING = """
     Examples:
@@ -147,7 +156,7 @@ class AnimateDiffPAGPipeline(
             feature_extractor=feature_extractor,
             image_encoder=image_encoder,
         )
-        self.vae_scale_factor = 2 ** (len(self.vae.config.block_out_channels) - 1)
+        self.vae_scale_factor = 2 ** (len(self.vae.config.block_out_channels) - 1) if getattr(self, "vae", None) else 8
         self.video_processor = VideoProcessor(do_resize=False, vae_scale_factor=self.vae_scale_factor)
 
         self.set_pag_applied_layers(pag_applied_layers)
@@ -734,6 +743,8 @@ class AnimateDiffPAGPipeline(
         elif self.do_classifier_free_guidance:
             prompt_embeds = torch.cat([negative_prompt_embeds, prompt_embeds])
 
+        prompt_embeds = prompt_embeds.repeat_interleave(repeats=num_frames, dim=0)
+
         if ip_adapter_image is not None or ip_adapter_image_embeds is not None:
             ip_adapter_image_embeds = self.prepare_ip_adapter_image_embeds(
                 ip_adapter_image,
@@ -805,7 +816,9 @@ class AnimateDiffPAGPipeline(
             with self.progress_bar(total=self._num_timesteps) as progress_bar:
                 for i, t in enumerate(timesteps):
                     # expand the latents if we are doing classifier free guidance
-                    latent_model_input = torch.cat([latents] * (prompt_embeds.shape[0] // latents.shape[0]))
+                    latent_model_input = torch.cat(
+                        [latents] * (prompt_embeds.shape[0] // num_frames // latents.shape[0])
+                    )
                     latent_model_input = self.scheduler.scale_model_input(latent_model_input, t)
 
                     # predict the noise residual
@@ -842,6 +855,9 @@ class AnimateDiffPAGPipeline(
                     # call the callback, if provided
                     if i == len(timesteps) - 1 or ((i + 1) > num_warmup_steps and (i + 1) % self.scheduler.order == 0):
                         progress_bar.update()
+
+                    if XLA_AVAILABLE:
+                        xm.mark_step()
 
         # 9. Post processing
         if output_type == "latent":

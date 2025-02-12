@@ -1,6 +1,6 @@
 #!/usr/bin/env python
 # coding=utf-8
-# Copyright 2024 The HuggingFace Inc. team. All rights reserved.
+# Copyright 2025 The HuggingFace Inc. team. All rights reserved.
 #
 # Licensed under the Apache License, Version 2.0 (the "License");
 # you may not use this file except in compliance with the License.
@@ -63,7 +63,7 @@ if is_wandb_available():
     import wandb
 
 # Will error if the minimal version of diffusers is not installed. Remove at your own risks.
-check_min_version("0.31.0.dev0")
+check_min_version("0.33.0.dev0")
 
 logger = get_logger(__name__)
 
@@ -256,7 +256,6 @@ def parse_args(input_args=None):
         default=None,
         help="Pretrained tokenizer name or path if not the same as model_name",
     )
-    # 同一个主题物体的样本路径
     parser.add_argument(
         "--instance_data_dir",
         type=str,
@@ -264,7 +263,6 @@ def parse_args(input_args=None):
         required=True,
         help="A folder containing the training data of instance images.",
     )
-    # 模型生成同类的样本数据路径
     parser.add_argument(
         "--class_data_dir",
         type=str,
@@ -292,7 +290,6 @@ def parse_args(input_args=None):
         help="Flag to add prior preservation loss.",
     )
     parser.add_argument("--prior_loss_weight", type=float, default=1.0, help="The weight of prior preservation loss.")
-    # 用于prior preservation loss生成的同类图像数目
     parser.add_argument(
         "--num_class_images",
         type=int,
@@ -620,7 +617,7 @@ class DreamBoothDataset(Dataset):
         self,
         instance_data_root,
         instance_prompt,
-        tokenizer,                                  # 分词器
+        tokenizer,
         class_data_root=None,
         class_prompt=None,
         class_num=None,
@@ -706,7 +703,7 @@ class DreamBoothDataset(Dataset):
                 example["class_prompt_ids"] = class_text_inputs.input_ids
                 example["class_attention_mask"] = class_text_inputs.attention_mask
 
-        return example      # images 和 text tokens
+        return example
 
 
 def collate_fn(examples, with_prior_preservation=False):
@@ -728,13 +725,13 @@ def collate_fn(examples, with_prior_preservation=False):
             attention_mask += [example["class_attention_mask"] for example in examples]
 
     pixel_values = torch.stack(pixel_values)
-    pixel_values = pixel_values.to(memory_format=torch.contiguous_format).float()       # images
+    pixel_values = pixel_values.to(memory_format=torch.contiguous_format).float()
 
     input_ids = torch.cat(input_ids, dim=0)
 
     batch = {
-        "input_ids": input_ids,         # images
-        "pixel_values": pixel_values,   # tokens
+        "input_ids": input_ids,
+        "pixel_values": pixel_values,
     }
 
     if has_attention_mask:
@@ -886,7 +883,7 @@ def main(args):
             num_new_images = args.num_class_images - cur_class_images
             logger.info(f"Number of class images to sample: {num_new_images}.")
 
-            sample_dataset = PromptDataset(args.class_prompt, num_new_images)       # 输入prompt, 生成对应的sample
+            sample_dataset = PromptDataset(args.class_prompt, num_new_images)
             sample_dataloader = torch.utils.data.DataLoader(sample_dataset, batch_size=args.sample_batch_size)
 
             sample_dataloader = accelerator.prepare(sample_dataloader)
@@ -981,7 +978,7 @@ def main(args):
 
     accelerator.register_save_state_pre_hook(save_model_hook)
     accelerator.register_load_state_pre_hook(load_model_hook)
-    # disable vae and text_encoder
+
     if vae is not None:
         vae.requires_grad_(False)
 
@@ -1303,16 +1300,17 @@ def main(args):
                     # Since we predict the noise instead of x_0, the original formulation is slightly changed.
                     # This is discussed in Section 4.2 of the same paper.
                     snr = compute_snr(noise_scheduler, timesteps)
-                    base_weight = (
-                        torch.stack([snr, args.snr_gamma * torch.ones_like(timesteps)], dim=1).min(dim=1)[0] / snr
-                    )
 
                     if noise_scheduler.config.prediction_type == "v_prediction":
                         # Velocity objective needs to be floored to an SNR weight of one.
-                        mse_loss_weights = base_weight + 1
+                        divisor = snr + 1
                     else:
-                        # Epsilon and sample both use the same loss weights.
-                        mse_loss_weights = base_weight
+                        divisor = snr
+
+                    mse_loss_weights = (
+                        torch.stack([snr, args.snr_gamma * torch.ones_like(timesteps)], dim=1).min(dim=1)[0] / divisor
+                    )
+
                     loss = F.mse_loss(model_pred.float(), target.float(), reduction="none")
                     loss = loss.mean(dim=list(range(1, len(loss.shape)))) * mse_loss_weights
                     loss = loss.mean()

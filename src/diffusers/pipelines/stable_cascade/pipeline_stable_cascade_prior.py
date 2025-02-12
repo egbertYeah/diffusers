@@ -23,12 +23,20 @@ from transformers import CLIPImageProcessor, CLIPTextModelWithProjection, CLIPTo
 
 from ...models import StableCascadeUNet
 from ...schedulers import DDPMWuerstchenScheduler
-from ...utils import BaseOutput, logging, replace_example_docstring
+from ...utils import BaseOutput, is_torch_xla_available, logging, replace_example_docstring
 from ...utils.torch_utils import randn_tensor
 from ..pipeline_utils import DiffusionPipeline
 
 
+if is_torch_xla_available():
+    import torch_xla.core.xla_model as xm
+
+    XLA_AVAILABLE = True
+else:
+    XLA_AVAILABLE = False
+
 logger = logging.get_logger(__name__)  # pylint: disable=invalid-name
+
 
 DEFAULT_STAGE_C_TIMESTEPS = list(np.linspace(1.0, 2 / 3, 20)) + list(np.linspace(2 / 3, 0.0, 11))[1:]
 
@@ -353,7 +361,7 @@ class StableCascadePriorPipeline(DiffusionPipeline):
         return self._num_timesteps
 
     def get_timestep_ratio_conditioning(self, t, alphas_cumprod):
-        s = torch.tensor([0.003])
+        s = torch.tensor([0.008])
         clamp_range = [0, 1]
         min_var = torch.cos(s / (1 + s) * torch.pi * 0.5) ** 2
         var = alphas_cumprod[t]
@@ -557,7 +565,7 @@ class StableCascadePriorPipeline(DiffusionPipeline):
         if isinstance(self.scheduler, DDPMWuerstchenScheduler):
             timesteps = timesteps[:-1]
         else:
-            if self.scheduler.config.clip_sample:
+            if hasattr(self.scheduler.config, "clip_sample") and self.scheduler.config.clip_sample:
                 self.scheduler.config.clip_sample = False  # disample sample clipping
                 logger.warning(" set `clip_sample` to be False")
         # 6. Run denoising loop
@@ -610,6 +618,9 @@ class StableCascadePriorPipeline(DiffusionPipeline):
                 latents = callback_outputs.pop("latents", latents)
                 prompt_embeds = callback_outputs.pop("prompt_embeds", prompt_embeds)
                 negative_prompt_embeds = callback_outputs.pop("negative_prompt_embeds", negative_prompt_embeds)
+
+            if XLA_AVAILABLE:
+                xm.mark_step()
 
         # Offload all models
         self.maybe_free_model_hooks()

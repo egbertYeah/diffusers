@@ -72,6 +72,8 @@ class StableDiffusionXLInpaintPipelineFastTests(
         }
     )
 
+    supports_dduf = False
+
     def get_dummy_components(self, skip_first_text_encoder=False, time_cond_proj_dim=None):
         torch.manual_seed(0)
         unet = UNet2DConditionModel(
@@ -223,12 +225,12 @@ class StableDiffusionXLInpaintPipelineFastTests(
         }
         return inputs
 
-    def test_ip_adapter_single(self):
+    def test_ip_adapter(self):
         expected_pipe_slice = None
         if torch_device == "cpu":
             expected_pipe_slice = np.array([0.8274, 0.5538, 0.6141, 0.5843, 0.6865, 0.7082, 0.5861, 0.6123, 0.5344])
 
-        return super().test_ip_adapter_single(expected_pipe_slice=expected_pipe_slice)
+        return super().test_ip_adapter(expected_pipe_slice=expected_pipe_slice)
 
     def test_components_function(self):
         init_components = self.get_dummy_components()

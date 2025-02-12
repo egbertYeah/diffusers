@@ -166,11 +166,12 @@ class UNet2DConditionModel(
 
     _supports_gradient_checkpointing = True
     _no_split_modules = ["BasicTransformerBlock", "ResnetBlock2D", "CrossAttnUpBlock2D"]
+    _skip_layerwise_casting_patterns = ["norm"]
 
     @register_to_config
     def __init__(
         self,
-        sample_size: Optional[int] = None,
+        sample_size: Optional[Union[int, Tuple[int, int]]] = None,
         in_channels: int = 4,
         out_channels: int = 4,
         center_input_sample: bool = False,
@@ -463,7 +464,6 @@ class UNet2DConditionModel(
                 dropout=dropout,
             )
             self.up_blocks.append(up_block)
-            prev_output_channel = output_channel
 
         # out
         if norm_num_groups is not None:
@@ -599,7 +599,7 @@ class UNet2DConditionModel(
             )
         elif encoder_hid_dim_type is not None:
             raise ValueError(
-                f"encoder_hid_dim_type: {encoder_hid_dim_type} must be None, 'text_proj' or 'text_image_proj'."
+                f"`encoder_hid_dim_type`: {encoder_hid_dim_type} must be None, 'text_proj', 'text_image_proj', or 'image_proj'."
             )
         else:
             self.encoder_hid_proj = None
@@ -679,7 +679,9 @@ class UNet2DConditionModel(
             # Kandinsky 2.2 ControlNet
             self.add_embedding = ImageHintTimeEmbedding(image_embed_dim=encoder_hid_dim, time_embed_dim=time_embed_dim)
         elif addition_embed_type is not None:
-            raise ValueError(f"addition_embed_type: {addition_embed_type} must be None, 'text' or 'text_image'.")
+            raise ValueError(
+                f"`addition_embed_type`: {addition_embed_type} must be None, 'text', 'text_image', 'text_time', 'image', or 'image_hint'."
+            )
 
     def _set_pos_net_if_use_gligen(self, attention_type: str, cross_attention_dim: int):
         if attention_type in ["gated", "gated-text-image"]:
@@ -832,10 +834,6 @@ class UNet2DConditionModel(
         for module in self.children():
             fn_recursive_set_attention_slice(module, reversed_slice_size)
 
-    def _set_gradient_checkpointing(self, module, value=False):
-        if hasattr(module, "gradient_checkpointing"):
-            module.gradient_checkpointing = value
-
     def enable_freeu(self, s1: float, s2: float, b1: float, b2: float):
         r"""Enables the FreeU mechanism from https://arxiv.org/abs/2309.11497.
 
@@ -914,10 +912,11 @@ class UNet2DConditionModel(
             # TODO: this requires sync between CPU and GPU. So try to pass timesteps as tensors if you can
             # This would be a good case for the `match` statement (Python 3.10+)
             is_mps = sample.device.type == "mps"
+            is_npu = sample.device.type == "npu"
             if isinstance(timestep, float):
-                dtype = torch.float32 if is_mps else torch.float64
+                dtype = torch.float32 if (is_mps or is_npu) else torch.float64
             else:
-                dtype = torch.int32 if is_mps else torch.int64
+                dtype = torch.int32 if (is_mps or is_npu) else torch.int64
             timesteps = torch.tensor([timesteps], dtype=dtype, device=sample.device)
         elif len(timesteps.shape) == 0:
             timesteps = timesteps[None].to(sample.device)
@@ -990,7 +989,7 @@ class UNet2DConditionModel(
             image_embs = added_cond_kwargs.get("image_embeds")
             aug_emb = self.add_embedding(image_embs)
         elif self.config.addition_embed_type == "image_hint":
-            # Kandinsky 2.2 - style
+            # Kandinsky 2.2 ControlNet - style
             if "image_embeds" not in added_cond_kwargs or "hint" not in added_cond_kwargs:
                 raise ValueError(
                     f"{self.__class__} has the config param `addition_embed_type` set to 'image_hint' which requires the keyword arguments `image_embeds` and `hint` to be passed in `added_cond_kwargs`"
@@ -1009,7 +1008,7 @@ class UNet2DConditionModel(
             # Kandinsky 2.1 - style
             if "image_embeds" not in added_cond_kwargs:
                 raise ValueError(
-                    f"{self.__class__} has the config param `encoder_hid_dim_type` set to 'text_image_proj' which requires the keyword argument `image_embeds` to be passed in  `added_conditions`"
+                    f"{self.__class__} has the config param `encoder_hid_dim_type` set to 'text_image_proj' which requires the keyword argument `image_embeds` to be passed in `added_cond_kwargs`"
                 )
 
             image_embeds = added_cond_kwargs.get("image_embeds")
@@ -1018,14 +1017,14 @@ class UNet2DConditionModel(
             # Kandinsky 2.2 - style
             if "image_embeds" not in added_cond_kwargs:
                 raise ValueError(
-                    f"{self.__class__} has the config param `encoder_hid_dim_type` set to 'image_proj' which requires the keyword argument `image_embeds` to be passed in  `added_conditions`"
+                    f"{self.__class__} has the config param `encoder_hid_dim_type` set to 'image_proj' which requires the keyword argument `image_embeds` to be passed in `added_cond_kwargs`"
                 )
             image_embeds = added_cond_kwargs.get("image_embeds")
             encoder_hidden_states = self.encoder_hid_proj(image_embeds)
         elif self.encoder_hid_proj is not None and self.config.encoder_hid_dim_type == "ip_image_proj":
             if "image_embeds" not in added_cond_kwargs:
                 raise ValueError(
-                    f"{self.__class__} has the config param `encoder_hid_dim_type` set to 'ip_image_proj' which requires the keyword argument `image_embeds` to be passed in  `added_conditions`"
+                    f"{self.__class__} has the config param `encoder_hid_dim_type` set to 'ip_image_proj' which requires the keyword argument `image_embeds` to be passed in `added_cond_kwargs`"
                 )
 
             if hasattr(self, "text_encoder_hid_proj") and self.text_encoder_hid_proj is not None:
@@ -1140,7 +1139,6 @@ class UNet2DConditionModel(
         # 1. time
         t_emb = self.get_time_embed(sample=sample, timestep=timestep)
         emb = self.time_embedding(t_emb, timestep_cond)
-        aug_emb = None
 
         class_emb = self.get_class_embed(sample=sample, class_labels=class_labels)
         if class_emb is not None:
@@ -1148,7 +1146,7 @@ class UNet2DConditionModel(
                 emb = torch.cat([emb, class_emb], dim=-1)
             else:
                 emb = emb + class_emb
-        # ???
+
         aug_emb = self.get_aug_embed(
             emb=emb, encoder_hidden_states=encoder_hidden_states, added_cond_kwargs=added_cond_kwargs
         )
@@ -1160,7 +1158,7 @@ class UNet2DConditionModel(
 
         if self.time_embed_act is not None:
             emb = self.time_embed_act(emb)
-        # 将其他信息合并到text中
+
         encoder_hidden_states = self.process_encoder_hidden_states(
             encoder_hidden_states=encoder_hidden_states, added_cond_kwargs=added_cond_kwargs
         )
